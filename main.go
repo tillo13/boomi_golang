@@ -68,7 +68,7 @@ func timer(quit chan bool, wg *sync.WaitGroup, start time.Time, done chan bool) 
 		color.YellowString("[Processing space transmission]"),
 		color.YellowString("[Analyzing launch coordinates]"),
 		color.YellowString("[Generating atmosphere report]"),
-		color.YellowString("[Transmitting  results to mission control]"),
+		color.YellowString("[Transmitting results to mission control]"),
 		color.YellowString("[Receiving confirmation from mission control]"),
 		color.YellowString("[Parsing stellar JSON from Boomi]"),
 	}
@@ -79,7 +79,6 @@ func timer(quit chan bool, wg *sync.WaitGroup, start time.Time, done chan bool) 
 	for {
 		select {
 		case <-quit:
-			log.Println("[DEBUG] Quit channel closed")
 			// If quit channel is closed and there are remaining messages,
 			// print all the remaining messages immediately.
 			if index < len(messages) {
@@ -89,7 +88,6 @@ func timer(quit chan bool, wg *sync.WaitGroup, start time.Time, done chan bool) 
 			}
 			return
 		case <-time.After(60 * time.Second):
-			log.Println("[DEBUG] Timer timed out after 60 seconds")
 			log.Println("Boomi Response timer timed out after 60 seconds.")
 			return
 		case <-time.After(1 * time.Second):
@@ -108,15 +106,13 @@ func timer(quit chan bool, wg *sync.WaitGroup, start time.Time, done chan bool) 
 				for {
 					select {
 					case <-quit: // Stop displaying the wait message when the response is received
-						log.Println("[DEBUG] Quit channel received data")
 						break waitLoop
 					case <-done: // Stop displaying the wait message when the done channel is closed
-						log.Println("[DEBUG] Done channel closed")
 						break waitLoop
 					default:
 						elapsed := time.Since(startWait).Seconds()
-						fmt.Printf("\r%s Reworking a few more things, one moment: %.2fs %s", startWait.Format("2006/01/02 15:04:05"), elapsed, spinner[int(elapsed*2)%len(spinner)])
-						time.Sleep(500 * time.Millisecond)
+						fmt.Printf("\r%s Reworking a few more things, one moment: %.5fs %s", startWait.Format("2006/01/02 15:04:05"), elapsed, spinner[int(elapsed*2)%len(spinner)])
+						time.Sleep(1 * time.Millisecond)
 					}
 				}
 			}
@@ -132,7 +128,6 @@ func printWithTimestamp(msg string) {
 
 func main() {
 	printWithTimestamp("Starting system checks")
-	var closeOnce sync.Once
 
 	var payloads []string // Running record of payloads entered by the user
 
@@ -240,7 +235,7 @@ func main() {
 				continue
 			}
 
-			closeOnce.Do(func() { close(doneTimer) })
+			close(doneTimer) // Close the done channel to stop the timer
 			quitTimer <- true
 			wg.Wait()
 
@@ -248,7 +243,7 @@ func main() {
 			log.Println("Response Status:", color.BlueString(response.Status), color.YellowString("[We have made contact!]"))
 
 			if response.StatusCode == http.StatusOK {
-				log.Println(color.GreenString("Sent HTTP request and received response"), color.YellowString("[Final logics confirmed!!]"))
+				log.Println(color.GreenString("Sent HTTP request and received response"), color.YellowString("[Final logics confirmed!]"))
 				log.Println(color.GreenString("Reading response body"), color.YellowString("[Validating completed flight log...]"))
 
 				body, err := ioutil.ReadAll(response.Body)
