@@ -86,6 +86,17 @@ func sendRequestAndProcessResponse(url, username, password, timestampString, pay
 	scriptInitTime := time.Since(start) - timeTakenGolangToBoomi
 	scriptProcessingOverhead := time.Since(start)
 
+	// Print the request and response details as in the original code
+	log.Println(color.GreenString("Sending HTTP request to Boomi API"), color.YellowString("[Sending launch status...]"))
+	fmt.Println("-----------------------------")
+	fmt.Println("Request_to_Boomi:")
+	fmt.Println(string(jsonData))
+	fmt.Println("----------------------------")
+
+	fmt.Println("Response from Boomi:")
+	fmt.Println(string(body))
+	fmt.Println("-----------------------------")
+
 	return startTime, boomiReceivedTime, timeTakenGolangToBoomi, scriptInitTime, scriptProcessingOverhead, nil
 }
 
