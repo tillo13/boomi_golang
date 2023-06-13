@@ -95,6 +95,16 @@ func sendHTTPRequest(url, username, password string, jsonData []byte) (*http.Res
 	return response, nil
 }
 
+func getRepeatInput() bool {
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Print(color.GreenString("Again (Y/N): "))
+	again, _ := reader.ReadString('\n')
+	again = strings.TrimSpace(again)
+
+	return strings.ToUpper(again) == "Y"
+}
+
 func cleanString(str string) string {
 	reg, err := regexp.Compile("[^0-9]+")
 	if err != nil {
@@ -213,13 +223,11 @@ func main() {
 
 	var payloads []string // Running record of payloads entered by the user
 
-	reader := bufio.NewReader(os.Stdin)
-
 	for {
 		screen.Clear()
 		screen.MoveTopLeft()
 
-		log.Println(color.GreenString("Program started"), color.YellowString("[Ignition sequence initiated.]"))
+		log.Println(color.GreenString("Program started"), color.YellowString("[Ignition sequence initiated]"))
 
 		username, password, err := getUserCredentials()
 		if err != nil {
@@ -322,11 +330,7 @@ func main() {
 			// Call the new printPayloadHistory function here
 			printPayloadHistory(payload, &payloads)
 
-			fmt.Print(color.GreenString("Again (Y/N): "))
-			again, _ := reader.ReadString('\n')
-			again = strings.TrimSpace(again)
-
-			if strings.ToUpper(again) != "Y" {
+			if !getRepeatInput() {
 				break
 			}
 
