@@ -268,7 +268,7 @@ func printWithTimestamp(msg string) {
 	fmt.Printf("%s %s\n", timeString, msg)
 }
 
-func getPayloadFromUser() (string, error) {
+func getUserInput() (string, error) {
 	reader := bufio.NewReader(os.Stdin)
 	fmt.Print("Enter the payload to send to Boomi: ")
 	payload, err := reader.ReadString('\n')
@@ -319,7 +319,7 @@ func main() {
 
 		url := "https://c01-usa-east.integrate.boomi.com/ws/simple/createGeneralListener"
 
-		payload, err := getPayloadFromUser()
+		payload, err := getUserInput()
 		if err != nil {
 			log.Fatal(err)
 		}
