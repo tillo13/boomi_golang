@@ -34,6 +34,24 @@ type RequestData struct {
 	PayloadRequestToBoomi string `json:"payload_request_to_boomi"`
 }
 
+func sendRequestWithRetry(url, username, password string, jsonData []byte, retryLimit int, retryWait time.Duration) (*http.Response, error) {
+	var response *http.Response
+	var err error
+
+	for retry := 0; retry < retryLimit; retry++ {
+		response, err = sendHTTPRequest(url, username, password, jsonData)
+
+		if err == nil && response.StatusCode == http.StatusOK {
+			return response, nil
+		} else {
+			log.Printf("Retry - Attempt %d of %d... ", retry+1, retryLimit)
+			time.Sleep(retryWait)
+		}
+	}
+
+	return nil, fmt.Errorf("Exceeded retry limit. Please check your network connection, and try again.")
+}
+
 func sendHTTPRequest(url, username, password string, jsonData []byte) (*http.Response, error) {
 	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
 	if err != nil {
@@ -222,23 +240,10 @@ func main() {
 
 		retryLimit := 3
 		retryWaitTime := 5 * time.Second
-		var response *http.Response
-		var success bool
 
-		for retry := 0; retry < retryLimit; retry++ {
-			success = false
-			response, err = sendHTTPRequest(url, username, password, jsonData)
+		response, err := sendRequestWithRetry(url, username, password, jsonData, retryLimit, retryWaitTime)
 
-			if err == nil && response.StatusCode == http.StatusOK {
-				success = true
-				break
-			} else {
-				log.Printf("Retry - Attempt %d of %d... ", retry+1, retryLimit)
-				time.Sleep(retryWaitTime)
-			}
-		}
-
-		if success {
+		if err == nil && response != nil {
 			close(doneTimer) // Close the done channel to stop the timer
 			quitTimer <- true
 			wg.Wait()
