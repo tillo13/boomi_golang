@@ -34,6 +34,61 @@ type RequestData struct {
 	PayloadRequestToBoomi string `json:"payload_request_to_boomi"`
 }
 
+func sendRequestAndProcessResponse(url, username, password, timestampString, payload string, start time.Time, wg *sync.WaitGroup, quit, done chan bool) (string, string, time.Duration, time.Duration, time.Duration, error) {
+	jsonData, err := json.MarshalIndent(RequestData{
+		UnixRequestToBoomi:    timestampString,
+		PayloadRequestToBoomi: payload,
+	}, "", "  ")
+	if err != nil {
+		return "", "", 0, 0, 0, err
+	}
+
+	response, err := sendRequestWithRetry(url, username, password, jsonData, 3, 5*time.Second)
+	if err != nil {
+		return "", "", 0, 0, 0, err
+	}
+
+	close(done) // Close the done channel to stop the timer
+	quit <- true
+	wg.Wait()
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return "", "", 0, 0, 0, err
+	}
+	defer response.Body.Close()
+
+	var responseJSON struct {
+		FullResponseFromBoomi string `json:"full_response_from_boomi"`
+		IncomingTimestamp     string `json:"incoming_timestamp"`
+		BoomiTimestamp        string `json:"boomi_timestamp"`
+	}
+	err = json.Unmarshal(body, &responseJSON)
+	if err != nil {
+		return "", "", 0, 0, 0, err
+	}
+
+	cleanedIncomingTimestamp := cleanString(responseJSON.IncomingTimestamp)
+	incomingTimestampMicro, err := strconv.ParseInt(cleanedIncomingTimestamp, 10, 64)
+	if err != nil {
+		return "", "", 0, 0, 0, err
+	}
+
+	cleanedBoomiTimestamp := cleanString(responseJSON.BoomiTimestamp)
+	boomiTimestampMicro, err := strconv.ParseInt(cleanedBoomiTimestamp, 10, 64)
+	if err != nil {
+		return "", "", 0, 0, 0, err
+	}
+
+	boomiReceivedTime := time.Unix(0, boomiTimestampMicro*int64(time.Microsecond)).Format("2006-01-02 15:04:05.000000")
+	startTime := start.Format("2006-01-02 15:04:05.000000")
+	timeTakenGolangToBoomi := time.Duration(boomiTimestampMicro-incomingTimestampMicro) * time.Microsecond
+	scriptInitTime := time.Since(start) - timeTakenGolangToBoomi
+	scriptProcessingOverhead := time.Since(start)
+
+	return startTime, boomiReceivedTime, timeTakenGolangToBoomi, scriptInitTime, scriptProcessingOverhead, nil
+}
+
 func getUserCredentials() (string, string, error) {
 	err := godotenv.Load()
 	if err != nil {
@@ -241,7 +296,6 @@ func main() {
 		}
 
 		start := time.Now() // Record the start time
-		scriptInitTime := time.Since(start)
 
 		timestamp := time.Now()
 		unixTimestamp := timestamp.UnixNano() / int64(time.Microsecond)
@@ -256,74 +310,22 @@ func main() {
 
 		log.Println(color.GreenString("Received user input"), color.YellowString("[Launch coordinates received]..."))
 
-		requestData := RequestData{
-			UnixRequestToBoomi:    timestampString,
-			PayloadRequestToBoomi: payload,
-		}
-
-		jsonData, err := json.MarshalIndent(requestData, "", "  ")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		log.Println(color.GreenString("Marshaled request data to JSON"), color.YellowString("[Converting transmission]..."))
-		log.Println(color.GreenString("Creating new HTTP request"), color.YellowString("[Creating orbit request]..."))
-
 		quitTimer := make(chan bool)
 		var wg sync.WaitGroup
 		wg.Add(1)
 		doneTimer := make(chan bool)
 		go timer(quitTimer, &wg, start, doneTimer)
 
-		retryLimit := 3
-		retryWaitTime := 5 * time.Second
+		startTime, boomiReceivedTime, timeTakenGolangToBoomi, scriptInitTime, scriptProcessingOverhead, err :=
+			sendRequestAndProcessResponse(url, username, password, timestampString, payload, start, &wg, quitTimer, doneTimer)
 
-		response, err := sendRequestWithRetry(url, username, password, jsonData, retryLimit, retryWaitTime)
-
-		if err == nil && response != nil {
-			close(doneTimer) // Close the done channel to stop the timer
-			quitTimer <- true
-			wg.Wait()
-
+		if err == nil {
 			fmt.Println()
-			log.Println("Response Status:", color.BlueString(response.Status), color.YellowString("[We have made contact!]"))
-
-			body, err := io.ReadAll(response.Body)
-			if err != nil {
-				log.Fatal(err)
-			}
-			defer response.Body.Close()
-
-			var responseJSON struct {
-				FullResponseFromBoomi string `json:"full_response_from_boomi"`
-				IncomingTimestamp     string `json:"incoming_timestamp"`
-				BoomiTimestamp        string `json:"boomi_timestamp"`
-			}
-			err = json.Unmarshal(body, &responseJSON)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			cleanedIncomingTimestamp := cleanString(responseJSON.IncomingTimestamp)
-			incomingTimestampMicro, err := strconv.ParseInt(cleanedIncomingTimestamp, 10, 64)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			cleanedBoomiTimestamp := cleanString(responseJSON.BoomiTimestamp)
-			boomiTimestampMicro, err := strconv.ParseInt(cleanedBoomiTimestamp, 10, 64)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			boomiReceivedTime := time.Unix(0, boomiTimestampMicro*int64(time.Microsecond)).Format("2006-01-02 15:04:05.000000")
-			startTime := start.Format("2006-01-02 15:04:05.000000")
-
-			fmt.Println("This Golang script started at:", color.BlueString(startTime))
-			fmt.Println("Boomi received it at:", color.BlueString(boomiReceivedTime))
-			fmt.Printf("Time taken between Golang creating it and Boomi responding to it: %s\n", color.BlueString(time.Duration(boomiTimestampMicro-incomingTimestampMicro).String()))
+			log.Println("Response Status:", color.BlueString("200 OK"), color.YellowString("[We have made contact!]"))
+			log.Println("This Golang script started at:", color.BlueString(startTime))
+			log.Println("Boomi received it at:", color.BlueString(boomiReceivedTime))
+			fmt.Printf("Time taken between Golang creating it and Boomi responding to it: %s\n", color.BlueString(timeTakenGolangToBoomi.String()))
 			fmt.Printf("Time taken to initialize the script: %s\n", color.BlueString(scriptInitTime.String()))
-			scriptProcessingOverhead := time.Since(start) - (time.Duration(boomiTimestampMicro-incomingTimestampMicro) * time.Microsecond)
 			fmt.Printf("Script Processing Overhead: %s\n", color.BlueString(scriptProcessingOverhead.String()))
 			fmt.Printf("Total execution time: %s\n", color.BlueString(time.Since(start).String()))
 
