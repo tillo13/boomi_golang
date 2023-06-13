@@ -34,6 +34,24 @@ type RequestData struct {
 	PayloadRequestToBoomi string `json:"payload_request_to_boomi"`
 }
 
+func sendHTTPRequest(url, username, password string, jsonData []byte) (*http.Response, error) {
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return nil, err
+	}
+
+	req.SetBasicAuth(username, password)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	response, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
+}
+
 func cleanString(str string) string {
 	reg, err := regexp.Compile("[^0-9]+")
 	if err != nil {
@@ -131,7 +149,7 @@ func main() {
 
 	var payloads []string // Running record of payloads entered by the user
 
-	reader := bufio.NewReader(os.Stdin) // Move this line to the top of the main function, before the loop
+	reader := bufio.NewReader(os.Stdin)
 
 	for {
 		screen.Clear()
@@ -158,21 +176,13 @@ func main() {
 		}
 
 		start := time.Now() // Record the start time
-
-		// Measure script initialization time
 		scriptInitTime := time.Since(start)
 
-		// Create a time object with the current time
 		timestamp := time.Now()
-
-		// Get the Unix timestamp in microseconds
 		unixTimestamp := timestamp.UnixNano() / int64(time.Microsecond)
-
-		// Convert the Unix timestamp to a string
 		timestampString := strconv.FormatInt(unixTimestamp, 10)
 
 		url := "https://c01-usa-east.integrate.boomi.com/ws/simple/createGeneralListener"
-
 		reader := bufio.NewReader(os.Stdin)
 
 		fmt.Print("Enter the payload to send to Boomi: ")
@@ -181,7 +191,7 @@ func main() {
 			log.Fatal(err)
 		}
 
-		payload = strings.TrimSuffix(payload, "\n") // This will remove the trailing newline
+		payload = strings.TrimSuffix(payload, "\n")
 
 		log.Println(color.GreenString("Received user input"), color.YellowString("[Launch coordinates received]..."))
 
@@ -198,16 +208,6 @@ func main() {
 		log.Println(color.GreenString("Marshaled request data to JSON"), color.YellowString("[Converting transmission]..."))
 		log.Println(color.GreenString("Creating new HTTP request"), color.YellowString("[Creating orbit request]..."))
 
-		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		req.SetBasicAuth(username, password)
-		req.Header.Set("Content-Type", "application/json")
-
-		client := &http.Client{}
-
 		quitTimer := make(chan bool)
 		var wg sync.WaitGroup
 		wg.Add(1)
@@ -216,25 +216,23 @@ func main() {
 
 		retryLimit := 3
 		retryWaitTime := 5 * time.Second
-		success := false
+		var response *http.Response
+		var success bool
 
 		for retry := 0; retry < retryLimit; retry++ {
 			success = false
+			response, err = sendHTTPRequest(url, username, password, jsonData)
 
-			log.Println(color.GreenString("Sending HTTP request to Boomi API"), color.YellowString("[Sending launch status...]"))
-			fmt.Println("-----------------------------")
-			fmt.Println("Request_to_Boomi:")
-			fmt.Println(string(jsonData))
-			fmt.Println("----------------------------")
-
-			response, err := client.Do(req)
-			if err != nil {
-				log.Printf("Error while sending request: %v\n", err)
+			if err == nil && response.StatusCode == http.StatusOK {
+				success = true
+				break
+			} else {
 				log.Printf("Retry - Attempt %d of %d... ", retry+1, retryLimit)
 				time.Sleep(retryWaitTime)
-				continue
 			}
+		}
 
+		if success {
 			close(doneTimer) // Close the done channel to stop the timer
 			quitTimer <- true
 			wg.Wait()
@@ -242,85 +240,63 @@ func main() {
 			fmt.Println()
 			log.Println("Response Status:", color.BlueString(response.Status), color.YellowString("[We have made contact!]"))
 
-			if response.StatusCode == http.StatusOK {
-				log.Println(color.GreenString("Sent HTTP request and received response"), color.YellowString("[Final logics confirmed!]"))
-				log.Println(color.GreenString("Reading response body"), color.YellowString("[Validating completed flight log...]"))
-
-				body, err := ioutil.ReadAll(response.Body)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				fmt.Println("-----------------------------")
-				fmt.Println("Response from Boomi:")
-				fmt.Println(string(body))
-				fmt.Println("-----------------------------")
-
-				defer response.Body.Close()
-
-				// Get the Boomi received and Golang script start timestamps from the response body
-				var responseJSON struct {
-					FullResponseFromBoomi string `json:"full_response_from_boomi"`
-					IncomingTimestamp     string `json:"incoming_timestamp"`
-					BoomiTimestamp        string `json:"boomi_timestamp"`
-				}
-				err = json.Unmarshal(body, &responseJSON)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				// Convert the timestamps to integers
-				cleanedIncomingTimestamp := cleanString(responseJSON.IncomingTimestamp)
-				incomingTimestampMicro, err := strconv.ParseInt(cleanedIncomingTimestamp, 10, 64)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				cleanedBoomiTimestamp := cleanString(responseJSON.BoomiTimestamp)
-				boomiTimestampMicro, err := strconv.ParseInt(cleanedBoomiTimestamp, 10, 64)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				boomiReceivedTime := time.Unix(0, boomiTimestampMicro*int64(time.Microsecond)).Format("2006-01-02 15:04:05.000000")
-				startTime := start.Format("2006-01-02 15:04:05.000000")
-
-				fmt.Println("This Golang script started at:", color.BlueString(startTime))
-				fmt.Println("Boomi received it at:", color.BlueString(boomiReceivedTime))
-				fmt.Printf("Time taken between Golang creating it and Boomi responding to it: %s\n", color.BlueString(time.Duration(boomiTimestampMicro-incomingTimestampMicro).String()))
-				fmt.Printf("Time taken to initialize the script: %s\n", color.BlueString(scriptInitTime.String()))
-				scriptProcessingOverhead := time.Since(start) - (time.Duration(boomiTimestampMicro-incomingTimestampMicro) * time.Microsecond)
-				fmt.Printf("Script Processing Overhead: %s\n", color.BlueString(scriptProcessingOverhead.String()))
-				fmt.Printf("Total execution time: %s\n", color.BlueString(time.Since(start).String()))
-
-				fmt.Println("\n----------------------------")
-				fmt.Println(color.YellowString("Current payload entered:"), payload)
-				payloads = append(payloads, payload)
-				fmt.Println(color.YellowString("Previous payloads:"))
-				for _, p := range payloads {
-					fmt.Println(p)
-				}
-				fmt.Println("----------------------------")
-
-				success = true
-				break
-
-			} else {
-				log.Printf("Retry - Attempt %d of %d... ", retry+1, retryLimit)
-				time.Sleep(5 * time.Second)
+			body, err := ioutil.ReadAll(response.Body)
+			if err != nil {
+				log.Fatal(err)
 			}
-		}
+			defer response.Body.Close()
 
-		if !success {
+			var responseJSON struct {
+				FullResponseFromBoomi string `json:"full_response_from_boomi"`
+				IncomingTimestamp     string `json:"incoming_timestamp"`
+				BoomiTimestamp        string `json:"boomi_timestamp"`
+			}
+			err = json.Unmarshal(body, &responseJSON)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			cleanedIncomingTimestamp := cleanString(responseJSON.IncomingTimestamp)
+			incomingTimestampMicro, err := strconv.ParseInt(cleanedIncomingTimestamp, 10, 64)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			cleanedBoomiTimestamp := cleanString(responseJSON.BoomiTimestamp)
+			boomiTimestampMicro, err := strconv.ParseInt(cleanedBoomiTimestamp, 10, 64)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			boomiReceivedTime := time.Unix(0, boomiTimestampMicro*int64(time.Microsecond)).Format("2006-01-02 15:04:05.000000")
+			startTime := start.Format("2006-01-02 15:04:05.000000")
+
+			fmt.Println("This Golang script started at:", color.BlueString(startTime))
+			fmt.Println("Boomi received it at:", color.BlueString(boomiReceivedTime))
+			fmt.Printf("Time taken between Golang creating it and Boomi responding to it: %s\n", color.BlueString(time.Duration(boomiTimestampMicro-incomingTimestampMicro).String()))
+			fmt.Printf("Time taken to initialize the script: %s\n", color.BlueString(scriptInitTime.String()))
+			scriptProcessingOverhead := time.Since(start) - (time.Duration(boomiTimestampMicro-incomingTimestampMicro) * time.Microsecond)
+			fmt.Printf("Script Processing Overhead: %s\n", color.BlueString(scriptProcessingOverhead.String()))
+			fmt.Printf("Total execution time: %s\n", color.BlueString(time.Since(start).String()))
+
+			fmt.Println("\n----------------------------")
+			fmt.Println(color.YellowString("Current payload entered:"), payload)
+			payloads = append(payloads, payload)
+			fmt.Println(color.YellowString("Previous payloads:"))
+			for _, p := range payloads {
+				fmt.Println(p)
+			}
+			fmt.Println("----------------------------")
+
+			fmt.Print(color.GreenString("Again (Y/N): "))
+			again, _ := reader.ReadString('\n')
+			again = strings.TrimSpace(again)
+
+			if strings.ToUpper(again) != "Y" {
+				break
+			}
+		} else {
 			log.Println(color.RedString("Exceeded retry limit. Please check your network connection, and try again."))
-			break
-		}
-
-		fmt.Print(color.GreenString("Again (Y/N): "))
-		again, _ := reader.ReadString('\n')
-		again = strings.TrimSpace(again)
-
-		if strings.ToUpper(again) != "Y" {
 			break
 		}
 	}
