@@ -144,6 +144,16 @@ func printWithTimestamp(msg string) {
 	fmt.Printf("%s %s\n", timeString, msg)
 }
 
+func getPayloadFromUser() (string, error) {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter the payload to send to Boomi: ")
+	payload, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(payload, "\n"), nil
+}
+
 func main() {
 	printWithTimestamp("Starting system checks")
 
@@ -183,15 +193,11 @@ func main() {
 		timestampString := strconv.FormatInt(unixTimestamp, 10)
 
 		url := "https://c01-usa-east.integrate.boomi.com/ws/simple/createGeneralListener"
-		reader := bufio.NewReader(os.Stdin)
 
-		fmt.Print("Enter the payload to send to Boomi: ")
-		payload, err := reader.ReadString('\n')
+		payload, err := getPayloadFromUser()
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		payload = strings.TrimSuffix(payload, "\n")
 
 		log.Println(color.GreenString("Received user input"), color.YellowString("[Launch coordinates received]..."))
 
