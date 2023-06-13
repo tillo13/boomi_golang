@@ -29,11 +29,13 @@ const (
 	Blue   = "\033[34m"
 )
 
+// RequestData structure holds the request information to be sent to Boomi API
 type RequestData struct {
 	UnixRequestToBoomi    string `json:"unix_request_to_boomi"`
 	PayloadRequestToBoomi string `json:"payload_request_to_boomi"`
 }
 
+// cleanString function cleans a string by removing all non-numeric characters
 func cleanString(str string) string {
 	reg, err := regexp.Compile("[^0-9]+")
 	if err != nil {
@@ -43,6 +45,7 @@ func cleanString(str string) string {
 	return cleanedString
 }
 
+// timer function displays messages in the console with a delay to simulate processing time
 func timer(quit chan bool, wg *sync.WaitGroup, start time.Time, done chan bool) {
 	defer wg.Done()
 	messages := []string{
@@ -120,12 +123,14 @@ func timer(quit chan bool, wg *sync.WaitGroup, start time.Time, done chan bool) 
 	}
 }
 
+// printWithTimestamp function adds a timestamp to a console message
 func printWithTimestamp(msg string) {
 	currentTime := time.Now()
 	timeString := currentTime.Format("2006/01/02 15:04:05")
 	fmt.Printf("%s %s\n", timeString, msg)
 }
 
+// main function runs the script
 func main() {
 	printWithTimestamp("Starting system checks")
 
@@ -139,6 +144,7 @@ func main() {
 
 		log.Println(color.GreenString("Program started"), color.YellowString("[Ignition sequence initiated.]"))
 
+		// Read the username and password from the .env file or user input if not available
 		err := godotenv.Load()
 		var username, password string
 		if err != nil {
@@ -258,7 +264,7 @@ func main() {
 
 				defer response.Body.Close()
 
-				// Get the Boomi received and Golang script start timestamps from the response body
+				// Get the Boomi received and Golang scriptstart timestamps from the response body
 				var responseJSON struct {
 					FullResponseFromBoomi string `json:"full_response_from_boomi"`
 					IncomingTimestamp     string `json:"incoming_timestamp"`
