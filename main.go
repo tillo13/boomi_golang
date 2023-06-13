@@ -300,6 +300,15 @@ func printPayloadHistory(currentPayload string, payloadHistory *[]string) {
 	fmt.Println("----------------------------")
 }
 
+func getAndDisplayPayload() (string, error) {
+	log.Println(color.GreenString("Received user input"), color.YellowString("[Launch coordinates received]..."))
+	payload, err := getUserInput()
+	if err != nil {
+		return "", err
+	}
+	return payload, nil
+}
+
 func main() {
 	printWithTimestamp("Starting system checks")
 
@@ -321,12 +330,11 @@ func main() {
 
 		url := "https://c01-usa-east.integrate.boomi.com/ws/simple/createGeneralListener"
 
-		payload, err := getUserInput()
+		// Call the new getAndDisplayPayload function here
+		payload, err := getAndDisplayPayload()
 		if err != nil {
 			log.Fatal(err)
 		}
-
-		log.Println(color.GreenString("Received user input"), color.YellowString("[Launch coordinates received]..."))
 
 		quitTimer := make(chan bool)
 		var wg sync.WaitGroup
