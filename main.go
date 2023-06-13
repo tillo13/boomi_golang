@@ -185,6 +185,17 @@ func cleanString(str string) string {
 	return cleanedString
 }
 
+func printIntro() {
+	screen.Clear()
+	screen.MoveTopLeft()
+
+	log.Println(color.GreenString("Program started"), color.YellowString("[Ignition sequence initiated]"))
+
+	if os.Getenv("USERNAME") != "" && os.Getenv("PASSWORD") != "" {
+		log.Println(color.GreenString("Loaded .env file"), color.YellowString("[Ground control, we are ready for liftoff!]"))
+	}
+}
+
 func timer(quit chan bool, wg *sync.WaitGroup, start time.Time, done chan bool) {
 	defer wg.Done()
 	messages := []string{
@@ -295,20 +306,11 @@ func main() {
 	var payloads []string // Running record of payloads entered by the user
 
 	for {
-		screen.Clear()
-		screen.MoveTopLeft()
-
-		log.Println(color.GreenString("Program started"), color.YellowString("[Ignition sequence initiated]"))
+		printIntro()
 
 		username, password, err := getUserCredentials()
 		if err != nil {
 			log.Fatal(err)
-		}
-
-		if os.Getenv("USERNAME") != "" && os.Getenv("PASSWORD") != "" {
-			log.Println(color.GreenString("Loaded .env file"), color.YellowString("[Ground control, we are ready for liftoff!]"))
-		} else {
-			log.Println(color.YellowString("Using entered credentials"))
 		}
 
 		start := time.Now() // Record the start time
