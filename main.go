@@ -5,7 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -34,6 +34,31 @@ type RequestData struct {
 	PayloadRequestToBoomi string `json:"payload_request_to_boomi"`
 }
 
+func getUserCredentials() (string, string, error) {
+	err := godotenv.Load()
+	if err != nil {
+		reader := bufio.NewReader(os.Stdin)
+
+		fmt.Print("Unable to load .env file. Please enter your username: ")
+		username, err := reader.ReadString('\n')
+		if err != nil {
+			return "", "", err
+		}
+		username = strings.TrimSuffix(username, "\n")
+
+		fmt.Print("Please enter your password: ")
+		password, err := reader.ReadString('\n')
+		if err != nil {
+			return "", "", err
+		}
+		password = strings.TrimSuffix(password, "\n")
+
+		return username, password, nil
+	} else {
+		return os.Getenv("USERNAME"), os.Getenv("PASSWORD"), nil
+	}
+}
+
 func sendRequestWithRetry(url, username, password string, jsonData []byte, retryLimit int, retryWait time.Duration) (*http.Response, error) {
 	var response *http.Response
 	var err error
@@ -49,7 +74,7 @@ func sendRequestWithRetry(url, username, password string, jsonData []byte, retry
 		}
 	}
 
-	return nil, fmt.Errorf("Exceeded retry limit. Please check your network connection, and try again.")
+	return nil, fmt.Errorf("exceeded retry limit. Please check your network connection, and try again")
 }
 
 func sendHTTPRequest(url, username, password string, jsonData []byte) (*http.Response, error) {
@@ -185,22 +210,15 @@ func main() {
 
 		log.Println(color.GreenString("Program started"), color.YellowString("[Ignition sequence initiated.]"))
 
-		err := godotenv.Load()
-		var username, password string
+		username, password, err := getUserCredentials()
 		if err != nil {
-			fmt.Print("Unable to load .env file. Please enter your username: ")
-			username, _ = reader.ReadString('\n')
-			username = strings.TrimSuffix(username, "\n")
+			log.Fatal(err)
+		}
 
-			fmt.Print("Please enter your password: ")
-			password, _ = reader.ReadString('\n')
-			password = strings.TrimSuffix(password, "\n")
-
-			log.Println(color.YellowString("Using entered credentials"))
-		} else {
+		if os.Getenv("USERNAME") != "" && os.Getenv("PASSWORD") != "" {
 			log.Println(color.GreenString("Loaded .env file"), color.YellowString("[Ground control, we are ready for liftoff!]"))
-			username = os.Getenv("USERNAME")
-			password = os.Getenv("PASSWORD")
+		} else {
+			log.Println(color.YellowString("Using entered credentials"))
 		}
 
 		start := time.Now() // Record the start time
@@ -251,7 +269,7 @@ func main() {
 			fmt.Println()
 			log.Println("Response Status:", color.BlueString(response.Status), color.YellowString("[We have made contact!]"))
 
-			body, err := ioutil.ReadAll(response.Body)
+			body, err := io.ReadAll(response.Body)
 			if err != nil {
 				log.Fatal(err)
 			}
@@ -306,6 +324,7 @@ func main() {
 			if strings.ToUpper(again) != "Y" {
 				break
 			}
+
 		} else {
 			log.Println(color.RedString("Exceeded retry limit. Please check your network connection, and try again."))
 			break
