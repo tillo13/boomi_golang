@@ -160,6 +160,22 @@ func getRepeatInput() bool {
 	return strings.ToUpper(again) == "Y"
 }
 
+func printResultsAndAskForRepeat(start time.Time, startTime, boomiReceivedTime string, timeTakenGolangToBoomi, scriptInitTime, scriptProcessingOverhead time.Duration, payload string, payloadHistory *[]string) bool {
+	fmt.Println()
+	log.Println("Response Status:", color.BlueString("200 OK"), color.YellowString("[We have made contact!]"))
+	log.Println("This Golang script started at:", color.BlueString(startTime))
+	log.Println("Boomi received it at:", color.BlueString(boomiReceivedTime))
+	fmt.Printf("Time taken between Golang creating it and Boomi responding to it: %s\n", color.BlueString(timeTakenGolangToBoomi.String()))
+	fmt.Printf("Time taken to initialize the script: %s\n", color.BlueString(scriptInitTime.String()))
+	fmt.Printf("Script Processing Overhead: %s\n", color.BlueString(scriptProcessingOverhead.String()))
+	fmt.Printf("Total execution time: %s\n", color.BlueString(time.Since(start).String()))
+
+	// Call the new printPayloadHistory function here
+	printPayloadHistory(payload, payloadHistory)
+
+	return getRepeatInput()
+}
+
 func cleanString(str string) string {
 	reg, err := regexp.Compile("[^0-9]+")
 	if err != nil {
@@ -320,22 +336,11 @@ func main() {
 			sendRequestAndProcessResponse(url, username, password, timestampString, payload, start, &wg, quitTimer, doneTimer)
 
 		if err == nil {
-			fmt.Println()
-			log.Println("Response Status:", color.BlueString("200 OK"), color.YellowString("[We have made contact!]"))
-			log.Println("This Golang script started at:", color.BlueString(startTime))
-			log.Println("Boomi received it at:", color.BlueString(boomiReceivedTime))
-			fmt.Printf("Time taken between Golang creating it and Boomi responding to it: %s\n", color.BlueString(timeTakenGolangToBoomi.String()))
-			fmt.Printf("Time taken to initialize the script: %s\n", color.BlueString(scriptInitTime.String()))
-			fmt.Printf("Script Processing Overhead: %s\n", color.BlueString(scriptProcessingOverhead.String()))
-			fmt.Printf("Total execution time: %s\n", color.BlueString(time.Since(start).String()))
+			repeat := printResultsAndAskForRepeat(start, startTime, boomiReceivedTime, timeTakenGolangToBoomi, scriptInitTime, scriptProcessingOverhead, payload, &payloads)
 
-			// Call the new printPayloadHistory function here
-			printPayloadHistory(payload, &payloads)
-
-			if !getRepeatInput() {
+			if !repeat {
 				break
 			}
-
 		} else {
 			log.Println(color.RedString("Exceeded retry limit. Please check your network connection, and try again."))
 			break
