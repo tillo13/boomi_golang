@@ -197,6 +197,17 @@ func getPayloadFromUser() (string, error) {
 	return strings.TrimSuffix(payload, "\n"), nil
 }
 
+func printPayloadHistory(currentPayload string, payloadHistory *[]string) {
+	fmt.Println("\n----------------------------")
+	fmt.Println(color.YellowString("Current payload entered:"), currentPayload)
+	*payloadHistory = append(*payloadHistory, currentPayload)
+	fmt.Println(color.YellowString("Previous payloads:"))
+	for _, p := range *payloadHistory {
+		fmt.Println(p)
+	}
+	fmt.Println("----------------------------")
+}
+
 func main() {
 	printWithTimestamp("Starting system checks")
 
@@ -308,14 +319,8 @@ func main() {
 			fmt.Printf("Script Processing Overhead: %s\n", color.BlueString(scriptProcessingOverhead.String()))
 			fmt.Printf("Total execution time: %s\n", color.BlueString(time.Since(start).String()))
 
-			fmt.Println("\n----------------------------")
-			fmt.Println(color.YellowString("Current payload entered:"), payload)
-			payloads = append(payloads, payload)
-			fmt.Println(color.YellowString("Previous payloads:"))
-			for _, p := range payloads {
-				fmt.Println(p)
-			}
-			fmt.Println("----------------------------")
+			// Call the new printPayloadHistory function here
+			printPayloadHistory(payload, &payloads)
 
 			fmt.Print(color.GreenString("Again (Y/N): "))
 			again, _ := reader.ReadString('\n')
